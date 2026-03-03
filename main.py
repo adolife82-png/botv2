@@ -4,20 +4,19 @@ from discord import app_commands
 from discord.ui import View, Select, Button
 import os
 from dotenv import load_dotenv
+from datetime import timedelta
 
 load_dotenv()
 
 TOKEN = os.getenv("TOKEN")
 LOG_CHANNEL_ID = int(os.getenv("LOG_CHANNEL_ID"))
 SUPPORT_ROLE_ID = int(os.getenv("SUPPORT_ROLE_ID"))
-MUTED_ROLE_ID = int(os.getenv("MUTED_ROLE_ID"))
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-
 # ==================================================
-#                    TICKET SİSTEMİ
+#                   TICKET SİSTEMİ
 # ==================================================
 
 class TicketSelect(Select):
@@ -93,11 +92,8 @@ class CloseButton(Button):
         )
 
     async def callback(self, interaction: discord.Interaction):
-
         log_channel = bot.get_channel(LOG_CHANNEL_ID)
-
         await log_channel.send(f"🔒 Ticket kapatıldı: {interaction.channel.name} | Kapatan: {interaction.user}")
-
         await interaction.channel.delete()
 
 
@@ -114,10 +110,8 @@ async def panel(interaction: discord.Interaction):
         title="📨 Atlas Project - Destek Merkezi",
         description=(
             "**Destek Merkezi Hakkında**\n"
-            "Aşağıdaki kategorilerden uygun olanı seçerek hemen ticket oluşturabilirsiniz.\n\n"
+            "Aşağıdan kategori seçerek ticket oluşturabilirsiniz.\n\n"
             "⚠ Gereksiz ticket açmayınız.\n\n"
-            "**Sunucu Bilgisi**\n"
-            "Kuralları okumayı unutmayın.\n\n"
             "Atlas Project © 2026"
         ),
         color=discord.Color.dark_blue()
@@ -127,7 +121,7 @@ async def panel(interaction: discord.Interaction):
 
 
 # ==================================================
-#                 TICKET MESAJ LOG
+#                TICKET MESAJ LOG
 # ==================================================
 
 @bot.event
@@ -139,11 +133,7 @@ async def on_message(message):
     if message.channel.name.startswith("ticket-"):
         log_channel = bot.get_channel(LOG_CHANNEL_ID)
 
-        embed = discord.Embed(
-            title="📨 Ticket Mesaj Log",
-            color=discord.Color.green()
-        )
-
+        embed = discord.Embed(title="📨 Ticket Mesaj Log", color=discord.Color.green())
         embed.add_field(name="Kanal", value=message.channel.name, inline=False)
         embed.add_field(name="Gönderen", value=str(message.author), inline=False)
         embed.add_field(name="Mesaj", value=message.content or "Dosya / Embed", inline=False)
@@ -154,7 +144,7 @@ async def on_message(message):
 
 
 # ==================================================
-#                  MODERASYON KOMUTLARI
+#                 MODERASYON KOMUTLARI
 # ==================================================
 
 @bot.tree.command(name="clear", description="Mesaj siler")
@@ -178,17 +168,6 @@ async def ban(interaction: discord.Interaction, user: discord.Member, sebep: str
     await interaction.response.send_message(f"{user} banlandı.")
 
 
-@bot.tree.command(name="unban", description="Ban kaldırır")
-async def unban(interaction: discord.Interaction, user_id: str):
-
-    if not interaction.user.guild_permissions.ban_members:
-        return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
-
-    user = await bot.fetch_user(int(user_id))
-    await interaction.guild.unban(user)
-    await interaction.response.send_message(f"{user} unbanlandı.")
-
-
 @bot.tree.command(name="kick", description="Kullanıcıyı atar")
 async def kick(interaction: discord.Interaction, user: discord.Member, sebep: str = "Sebep belirtilmedi"):
 
@@ -199,28 +178,43 @@ async def kick(interaction: discord.Interaction, user: discord.Member, sebep: st
     await interaction.response.send_message(f"{user} atıldı.")
 
 
-@bot.tree.command(name="mute", description="Kullanıcıyı susturur")
-async def mute(interaction: discord.Interaction, user: discord.Member):
+# =================== SÜRELİ MUTE ===================
 
-    if not interaction.user.guild_permissions.manage_roles:
+@bot.tree.command(name="mute", description="Kullanıcıyı süreli susturur")
+@app_commands.describe(sure="Süre (örn: 10m, 1h, 2d)")
+async def mute(interaction: discord.Interaction, user: discord.Member, sure: str):
+
+    if not interaction.user.guild_permissions.moderate_members:
         return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
 
-    muted_role = interaction.guild.get_role(MUTED_ROLE_ID)
-    await user.add_roles(muted_role)
+    time_units = {
+        "m": 60,
+        "h": 3600,
+        "d": 86400
+    }
 
-    await interaction.response.send_message(f"{user} susturuldu.")
+    try:
+        amount = int(sure[:-1])
+        unit = sure[-1]
+
+        seconds = amount * time_units[unit]
+        duration = timedelta(seconds=seconds)
+
+    except:
+        return await interaction.response.send_message("Format yanlış. Örnek: 10m, 1h, 2d", ephemeral=True)
+
+    await user.timeout(duration)
+    await interaction.response.send_message(f"{user.mention} {sure} süreyle timeout aldı.")
 
 
-@bot.tree.command(name="unmute", description="Susturma kaldırır")
+@bot.tree.command(name="unmute", description="Timeout kaldırır")
 async def unmute(interaction: discord.Interaction, user: discord.Member):
 
-    if not interaction.user.guild_permissions.manage_roles:
+    if not interaction.user.guild_permissions.moderate_members:
         return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
 
-    muted_role = interaction.guild.get_role(MUTED_ROLE_ID)
-    await user.remove_roles(muted_role)
-
-    await interaction.response.send_message(f"{user} susturması kaldırıldı.")
+    await user.timeout(None)
+    await interaction.response.send_message(f"{user.mention} timeout kaldırıldı.")
 
 
 # ==================================================
