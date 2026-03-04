@@ -12,6 +12,7 @@ TOKEN = os.getenv("TOKEN")
 LOG_CHANNEL_ID = int(os.getenv("LOG_CHANNEL_ID"))
 SUPPORT_ROLE_ID = int(os.getenv("SUPPORT_ROLE_ID"))
 VOICE_CHANNEL_ID = int(os.getenv("VOICE_CHANNEL_ID"))
+WELCOME_CHANNEL_ID = 1478713946813890730  # Hoşgeldin Kanalı
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -30,13 +31,14 @@ async def connect_voice():
         return
 
     try:
-        vc = await channel.connect(self_mute=True, self_deaf=False)
-        print("Ses kanalına bağlandı (mikrofon kapalı).")
+        if not discord.utils.get(bot.voice_clients, guild=channel.guild):
+            await channel.connect(self_mute=True)
+            print("Ses kanalına bağlandı (mikrofon kapalı).")
     except Exception as e:
         print(f"Ses bağlantı hatası: {e}")
 
 # ==================================================
-# TICKET SİSTEMİ
+#                   TICKET SİSTEMİ
 # ==================================================
 
 class TicketSelect(Select):
@@ -128,7 +130,12 @@ async def panel(interaction: discord.Interaction):
 
     embed = discord.Embed(
         title="📨 Ares Projects - Destek Merkezi",
-        description="Kategori seçerek ticket açabilirsiniz.",
+        description=(
+            "**Destek Merkezi Hakkında**\n"
+            "Aşağıdan kategori seçerek ticket oluşturabilirsiniz.\n\n"
+            "⚠ Gereksiz ticket açmayınız.\n\n"
+            "Ares Projects © 2026"
+        ),
         color=discord.Color.dark_blue()
     )
 
@@ -136,7 +143,7 @@ async def panel(interaction: discord.Interaction):
 
 
 # ==================================================
-# MODERASYON
+# MODERASYON KOMUTLARI
 # ==================================================
 
 @bot.tree.command(name="mute", description="Kullanıcıyı süreli susturur")
@@ -173,6 +180,33 @@ async def unmute(interaction: discord.Interaction, user: discord.Member):
     await user.timeout(None)
     await interaction.followup.send(f"{user.mention} timeout kaldırıldı.")
 
+
+# ==================================================
+# HOŞ GELDİN MESAJI (DM ve Kanal)
+# ==================================================
+
+@bot.event
+async def on_member_join(member: discord.Member):
+    channel = bot.get_channel(WELCOME_CHANNEL_ID)
+
+    # Kanalda hoş geldin mesajı
+    embed = discord.Embed(
+        title=f"Hoş geldin, {member.name}!",
+        description="Ares Projects ailesine katıldığın için mutluyuz.",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="Hizmetlerimiz", value="• Web sitesi yazılımı & geliştirme\n• E-ticaret sistemleri\n• Özel Discord bot geliştirme\n• Plugin & Plugin Paketleri")
+    embed.add_field(name="Deneyim", value="10+ yıl tecrübe • 200+ sunucu • 3000+ sipariş", inline=False)
+
+    await channel.send(embed=embed)
+
+    # Kullanıcıya DM ile hoş geldin mesajı
+    try:
+        await member.send(
+            f"Hoş geldin {member.name}!\nAres Projects ailesine katıldığın için mutluyuz. Hemen yukarıdaki kanalımızda sohbet başlatabilirsin. İyi sohbetler!"
+        )
+    except discord.Forbidden:
+        print(f"{member.name} DM mesajı engellenmiş.")
 
 # ==================================================
 
