@@ -143,8 +143,39 @@ async def panel(interaction: discord.Interaction):
 
 
 # ==================================================
-# MODERASYON KOMUTLARI
+# MODERASYON KOMUTLARI (BAN, KICK, CLEAR, MUTE, UNMUTE)
 # ==================================================
+
+@bot.tree.command(name="clear", description="Mesaj siler")
+@app_commands.describe(miktar="Silinecek mesaj sayısı")
+async def clear(interaction: discord.Interaction, miktar: int):
+
+    if not interaction.user.guild_permissions.manage_messages:
+        return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+
+    await interaction.channel.purge(limit=miktar)
+    await interaction.response.send_message(f"{miktar} mesaj silindi.", ephemeral=True)
+
+
+@bot.tree.command(name="ban", description="Kullanıcıyı banlar")
+async def ban(interaction: discord.Interaction, user: discord.Member, sebep: str = "Sebep belirtilmedi"):
+
+    if not interaction.user.guild_permissions.ban_members:
+        return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+
+    await user.ban(reason=sebep)
+    await interaction.response.send_message(f"{user} banlandı.")
+
+
+@bot.tree.command(name="kick", description="Kullanıcıyı atar")
+async def kick(interaction: discord.Interaction, user: discord.Member, sebep: str = "Sebep belirtilmedi"):
+
+    if not interaction.user.guild_permissions.kick_members:
+        return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+
+    await user.kick(reason=sebep)
+    await interaction.response.send_message(f"{user} atıldı.")
+
 
 @bot.tree.command(name="mute", description="Kullanıcıyı süreli susturur")
 @app_commands.describe(sure="Süre (örn: 10m, 1h, 2d)")
