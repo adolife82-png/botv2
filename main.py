@@ -31,14 +31,111 @@ async def connect_voice():
         return
 
     try:
+        # Botun ses kanalına bağlanıp mikrofonu kapalı şekilde girmesini sağlıyoruz
         if not discord.utils.get(bot.voice_clients, guild=channel.guild):
-            await channel.connect(self_mute=True)
+            await channel.connect(self_mute=True, self_deaf=False)
             print("Ses kanalına bağlandı (mikrofon kapalı).")
     except Exception as e:
         print(f"Ses bağlantı hatası: {e}")
 
 # ==================================================
-#                   TICKET SİSTEMİ
+# MODERASYON KOMUTLARI (BAN, KICK, CLEAR, MUTE, UNMUTE)
+# ==================================================
+
+@bot.tree.command(name="clear", description="Mesaj siler")
+@app_commands.describe(miktar="Silinecek mesaj sayısı")
+async def clear(interaction: discord.Interaction, miktar: int):
+
+    if not interaction.user.guild_permissions.manage_messages:
+        return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+
+    await interaction.channel.purge(limit=miktar)
+    await interaction.response.send_message(f"{miktar} mesaj silindi.", ephemeral=True)
+
+
+@bot.tree.command(name="ban", description="Kullanıcıyı banlar")
+async def ban(interaction: discord.Interaction, user: discord.Member, sebep: str = "Sebep belirtilmedi"):
+
+    if not interaction.user.guild_permissions.ban_members:
+        return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+
+    await user.ban(reason=sebep)
+    await interaction.response.send_message(f"{user} banlandı.")
+
+
+@bot.tree.command(name="kick", description="Kullanıcıyı atar")
+async def kick(interaction: discord.Interaction, user: discord.Member, sebep: str = "Sebep belirtilmedi"):
+
+    if not interaction.user.guild_permissions.kick_members:
+        return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+
+    await user.kick(reason=sebep)
+    await interaction.response.send_message(f"{user} atıldı.")
+
+
+@bot.tree.command(name="mute", description="Kullanıcıyı süreli susturur")
+@app_commands.describe(sure="Süre (örn: 10m, 1h, 2d)")
+async def mute(interaction: discord.Interaction, user: discord.Member, sure: str):
+
+    await interaction.response.defer()
+
+    if not interaction.user.guild_permissions.moderate_members:
+        return await interaction.followup.send("Yetkin yok.")
+
+    time_units = {"m": 60, "h": 3600, "d": 86400}
+
+    try:
+        amount = int(sure[:-1])
+        unit = sure[-1]
+        seconds = amount * time_units[unit]
+        duration = timedelta(seconds=seconds)
+    except:
+        return await interaction.followup.send("Format yanlış. Örnek: 10m, 1h, 2d")
+
+    await user.timeout(duration)
+    await interaction.followup.send(f"{user.mention} {sure} süreyle timeout aldı.")
+
+
+@bot.tree.command(name="unmute", description="Timeout kaldırır")
+async def unmute(interaction: discord.Interaction, user: discord.Member):
+
+    await interaction.response.defer()
+
+    if not interaction.user.guild_permissions.moderate_members:
+        return await interaction.followup.send("Yetkin yok.")
+
+    await user.timeout(None)
+    await interaction.followup.send(f"{user.mention} timeout kaldırıldı.")
+
+# ==================================================
+# HOŞ GELDİN MESAJI (DM ve Kanal)
+# ==================================================
+
+@bot.event
+async def on_member_join(member: discord.Member):
+    channel = bot.get_channel(WELCOME_CHANNEL_ID)
+
+    # Kanalda hoş geldin mesajı
+    embed = discord.Embed(
+        title=f"Hoş geldin, {member.name}!",
+        description="Ares Projects ailesine katıldığın için mutluyuz.",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="Hizmetlerimiz", value="• Web sitesi yazılımı & geliştirme\n• E-ticaret sistemleri\n• Özel Discord bot geliştirme\n• Plugin & Plugin Paketleri")
+    embed.add_field(name="Deneyim", value="10+ yıl tecrübe • 200+ sunucu • 3000+ sipariş", inline=False)
+
+    await channel.send(embed=embed)
+
+    # Kullanıcıya DM ile hoş geldin mesajı
+    try:
+        await member.send(
+            f"Hoş geldin {member.name}!\nAres Projects ailesine katıldığın için mutluyuz. Hemen yukarıdaki kanalımızda sohbet başlatabilirsin. İyi sohbetler!"
+        )
+    except discord.Forbidden:
+        print(f"{member.name} DM mesajı engellenmiş.")
+
+# ==================================================
+# TICKET SİSTEMİ
 # ==================================================
 
 class TicketSelect(Select):
@@ -143,111 +240,13 @@ async def panel(interaction: discord.Interaction):
 
 
 # ==================================================
-# MODERASYON KOMUTLARI (BAN, KICK, CLEAR, MUTE, UNMUTE)
-# ==================================================
-
-@bot.tree.command(name="clear", description="Mesaj siler")
-@app_commands.describe(miktar="Silinecek mesaj sayısı")
-async def clear(interaction: discord.Interaction, miktar: int):
-
-    if not interaction.user.guild_permissions.manage_messages:
-        return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
-
-    await interaction.channel.purge(limit=miktar)
-    await interaction.response.send_message(f"{miktar} mesaj silindi.", ephemeral=True)
-
-
-@bot.tree.command(name="ban", description="Kullanıcıyı banlar")
-async def ban(interaction: discord.Interaction, user: discord.Member, sebep: str = "Sebep belirtilmedi"):
-
-    if not interaction.user.guild_permissions.ban_members:
-        return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
-
-    await user.ban(reason=sebep)
-    await interaction.response.send_message(f"{user} banlandı.")
-
-
-@bot.tree.command(name="kick", description="Kullanıcıyı atar")
-async def kick(interaction: discord.Interaction, user: discord.Member, sebep: str = "Sebep belirtilmedi"):
-
-    if not interaction.user.guild_permissions.kick_members:
-        return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
-
-    await user.kick(reason=sebep)
-    await interaction.response.send_message(f"{user} atıldı.")
-
-
-@bot.tree.command(name="mute", description="Kullanıcıyı süreli susturur")
-@app_commands.describe(sure="Süre (örn: 10m, 1h, 2d)")
-async def mute(interaction: discord.Interaction, user: discord.Member, sure: str):
-
-    await interaction.response.defer()
-
-    if not interaction.user.guild_permissions.moderate_members:
-        return await interaction.followup.send("Yetkin yok.")
-
-    time_units = {"m": 60, "h": 3600, "d": 86400}
-
-    try:
-        amount = int(sure[:-1])
-        unit = sure[-1]
-        seconds = amount * time_units[unit]
-        duration = timedelta(seconds=seconds)
-    except:
-        return await interaction.followup.send("Format yanlış. Örnek: 10m, 1h, 2d")
-
-    await user.timeout(duration)
-    await interaction.followup.send(f"{user.mention} {sure} süreyle timeout aldı.")
-
-
-@bot.tree.command(name="unmute", description="Timeout kaldırır")
-async def unmute(interaction: discord.Interaction, user: discord.Member):
-
-    await interaction.response.defer()
-
-    if not interaction.user.guild_permissions.moderate_members:
-        return await interaction.followup.send("Yetkin yok.")
-
-    await user.timeout(None)
-    await interaction.followup.send(f"{user.mention} timeout kaldırıldı.")
-
-
-# ==================================================
-# HOŞ GELDİN MESAJI (DM ve Kanal)
-# ==================================================
-
-@bot.event
-async def on_member_join(member: discord.Member):
-    channel = bot.get_channel(WELCOME_CHANNEL_ID)
-
-    # Kanalda hoş geldin mesajı
-    embed = discord.Embed(
-        title=f"Hoş geldin, {member.name}!",
-        description="Ares Projects ailesine katıldığın için mutluyuz.",
-        color=discord.Color.green()
-    )
-    embed.add_field(name="Hizmetlerimiz", value="• Web sitesi yazılımı & geliştirme\n• E-ticaret sistemleri\n• Özel Discord bot geliştirme\n• Plugin & Plugin Paketleri")
-    embed.add_field(name="Deneyim", value="10+ yıl tecrübe • 200+ sunucu • 3000+ sipariş", inline=False)
-
-    await channel.send(embed=embed)
-
-    # Kullanıcıya DM ile hoş geldin mesajı
-    try:
-        await member.send(
-            f"Hoş geldin {member.name}!\nAres Projects ailesine katıldığın için mutluyuz. Hemen yukarıdaki kanalımızda sohbet başlatabilirsin. İyi sohbetler!"
-        )
-    except discord.Forbidden:
-        print(f"{member.name} DM mesajı engellenmiş.")
-
+# BOTUN SES KANALINA GİRME VE KANAL LOGLAMASI
 # ==================================================
 
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    bot.add_view(TicketView())
-    bot.add_view(CloseView())
-    bot.loop.create_task(connect_voice())
+    bot.loop.create_task(connect_voice())  # Ses kanalına bağlan
     print(f"{bot.user} aktif.")
-
 
 bot.run(TOKEN)
