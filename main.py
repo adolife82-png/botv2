@@ -58,7 +58,7 @@ class TicketSelect(Select):
         )
 
         embed = discord.Embed(
-            title="📩 Atlas Project - Destek Merkezi",
+            title="📩 Ares Projects - Destek Merkezi",
             description=f"{interaction.user.mention} talebiniz oluşturuldu.\n\nYetkili ekip en kısa sürede ilgilenecektir.",
             color=discord.Color.blue()
         )
@@ -107,12 +107,12 @@ class CloseView(View):
 async def panel(interaction: discord.Interaction):
 
     embed = discord.Embed(
-        title="📨 Atlas Project - Destek Merkezi",
+        title="📨 Ares Projects - Destek Merkezi",
         description=(
             "**Destek Merkezi Hakkında**\n"
             "Aşağıdan kategori seçerek ticket oluşturabilirsiniz.\n\n"
             "⚠ Gereksiz ticket açmayınız.\n\n"
-            "Atlas Project © 2026"
+            "Ares Projects © 2026"
         ),
         color=discord.Color.dark_blue()
     )
@@ -184,37 +184,43 @@ async def kick(interaction: discord.Interaction, user: discord.Member, sebep: st
 @app_commands.describe(sure="Süre (örn: 10m, 1h, 2d)")
 async def mute(interaction: discord.Interaction, user: discord.Member, sure: str):
 
-    if not interaction.user.guild_permissions.moderate_members:
-        return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+    await interaction.response.defer()
 
-    time_units = {
-        "m": 60,
-        "h": 3600,
-        "d": 86400
-    }
+    if not interaction.user.guild_permissions.moderate_members:
+        return await interaction.followup.send("Yetkin yok.")
+
+    time_units = {"m": 60, "h": 3600, "d": 86400}
 
     try:
         amount = int(sure[:-1])
         unit = sure[-1]
-
         seconds = amount * time_units[unit]
         duration = timedelta(seconds=seconds)
-
     except:
-        return await interaction.response.send_message("Format yanlış. Örnek: 10m, 1h, 2d", ephemeral=True)
+        return await interaction.followup.send("Format yanlış. Örnek: 10m, 1h, 2d")
 
-    await user.timeout(duration)
-    await interaction.response.send_message(f"{user.mention} {sure} süreyle timeout aldı.")
+    try:
+        await user.timeout(duration)
+    except Exception as e:
+        return await interaction.followup.send(f"Hata: {e}")
+
+    await interaction.followup.send(f"{user.mention} {sure} süreyle timeout aldı.")
 
 
 @bot.tree.command(name="unmute", description="Timeout kaldırır")
 async def unmute(interaction: discord.Interaction, user: discord.Member):
 
-    if not interaction.user.guild_permissions.moderate_members:
-        return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+    await interaction.response.defer()
 
-    await user.timeout(None)
-    await interaction.response.send_message(f"{user.mention} timeout kaldırıldı.")
+    if not interaction.user.guild_permissions.moderate_members:
+        return await interaction.followup.send("Yetkin yok.")
+
+    try:
+        await user.timeout(None)
+    except Exception as e:
+        return await interaction.followup.send(f"Hata: {e}")
+
+    await interaction.followup.send(f"{user.mention} timeout kaldırıldı.")
 
 
 # ==================================================
