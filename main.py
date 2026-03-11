@@ -1,6 +1,5 @@
 import discord
 from discord.ext import commands
-from discord import app_commands
 from discord.ui import View, Select, Button
 from datetime import timedelta
 import os
@@ -15,9 +14,26 @@ WELCOME_CHANNEL_ID = 1478713946813890730
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# =========================
+# ======================
+# READY
+# ======================
+
+@bot.event
+async def on_ready():
+
+    print(f"{bot.user} aktif")
+
+    try:
+        synced = await bot.tree.sync()
+        print(f"{len(synced)} slash komut senkronize edildi")
+    except Exception as e:
+        print(e)
+
+    bot.loop.create_task(join_voice())
+
+# ======================
 # SES KANALINA GİRME
-# =========================
+# ======================
 
 async def join_voice():
 
@@ -37,22 +53,9 @@ async def join_voice():
         except Exception as e:
             print("Ses hatası:", e)
 
-# =========================
-# READY
-# =========================
-
-@bot.event
-async def on_ready():
-
-    print(f"{bot.user} aktif")
-
-    await bot.tree.sync()
-
-    bot.loop.create_task(join_voice())
-
-# =========================
+# ======================
 # HOŞ GELDİN
-# =========================
+# ======================
 
 @bot.event
 async def on_member_join(member):
@@ -91,33 +94,40 @@ async def on_member_join(member):
     except:
         pass
 
-# =========================
+# ======================
 # TICKET SELECT
-# =========================
+# ======================
 
 class TicketSelect(Select):
 
     def __init__(self):
 
         options = [
-
             discord.SelectOption(label="Sipariş", emoji="🛒", value="siparis"),
             discord.SelectOption(label="Destek", emoji="🛠️", value="destek"),
             discord.SelectOption(label="Proje", emoji="⭐", value="proje"),
             discord.SelectOption(label="Ücretsiz Proje", emoji="🎁", value="free"),
             discord.SelectOption(label="Diğer", emoji="❓", value="other"),
-
         ]
 
         super().__init__(
             placeholder="Bir kategori seç",
             options=options,
-            custom_id="ticket_select",
+            custom_id="ticket_select"
         )
 
     async def callback(self, interaction: discord.Interaction):
 
         guild = interaction.guild
+        user = interaction.user
+
+        # açık ticket kontrol
+        for channel in guild.text_channels:
+            if channel.name == f"ticket-{user.name}":
+                return await interaction.response.send_message(
+                    f"Zaten açık bir ticketın var: {channel.mention}",
+                    ephemeral=True
+                )
 
         category = discord.utils.get(guild.categories, name="TICKETS")
 
@@ -125,32 +135,21 @@ class TicketSelect(Select):
             category = await guild.create_category("TICKETS")
 
         overwrites = {
-
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
-
-            interaction.user: discord.PermissionOverwrite(
-                read_messages=True,
-                send_messages=True
-            ),
-
-            guild.get_role(SUPPORT_ROLE_ID): discord.PermissionOverwrite(
-                read_messages=True,
-                send_messages=True
-            ),
-
+            user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            guild.get_role(SUPPORT_ROLE_ID): discord.PermissionOverwrite(read_messages=True, send_messages=True),
             guild.me: discord.PermissionOverwrite(read_messages=True)
-
         }
 
         channel = await guild.create_text_channel(
-            name=f"ticket-{interaction.user.name}",
+            name=f"ticket-{user.name}",
             category=category,
             overwrites=overwrites
         )
 
         embed = discord.Embed(
             title="📩 Ares Projects Destek",
-            description=f"{interaction.user.mention} ticket oluşturuldu.",
+            description=f"{user.mention} ticket oluşturuldu.",
             color=discord.Color.green()
         )
 
@@ -170,19 +169,15 @@ class TicketSelect(Select):
             ephemeral=True
         )
 
-# =========================
-# TICKET VIEW
-# =========================
-
 class TicketView(View):
 
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(TicketSelect())
 
-# =========================
-# CLOSE BUTTON
-# =========================
+# ======================
+# TICKET KAPAT
+# ======================
 
 class CloseButton(Button):
 
@@ -190,8 +185,7 @@ class CloseButton(Button):
 
         super().__init__(
             label="Ticket Kapat",
-            style=discord.ButtonStyle.red,
-            custom_id="close_ticket"
+            style=discord.ButtonStyle.red
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -209,20 +203,16 @@ class CloseView(View):
         super().__init__(timeout=None)
         self.add_item(CloseButton())
 
-# =========================
-# PANEL KOMUTU
-# =========================
+# ======================
+# PANEL
+# ======================
 
 @bot.tree.command(name="panel", description="Ticket paneli oluşturur")
 async def panel(interaction: discord.Interaction):
 
     embed = discord.Embed(
         title="📨 Ares Projects Destek Merkezi",
-        description="""
-Aşağıdan kategori seçerek ticket oluşturabilirsiniz.
-
-⚠ Gereksiz ticket açmayın.
-""",
+        description="Kategori seçerek ticket açabilirsiniz.",
         color=discord.Color.blue()
     )
 
@@ -231,9 +221,9 @@ Aşağıdan kategori seçerek ticket oluşturabilirsiniz.
         view=TicketView()
     )
 
-# =========================
+# ======================
 # CLEAR
-# =========================
+# ======================
 
 @bot.tree.command(name="clear")
 async def clear(interaction: discord.Interaction, amount: int):
@@ -248,9 +238,9 @@ async def clear(interaction: discord.Interaction, amount: int):
         ephemeral=True
     )
 
-# =========================
+# ======================
 # BAN
-# =========================
+# ======================
 
 @bot.tree.command(name="ban")
 async def ban(interaction: discord.Interaction, user: discord.Member, reason: str="Sebep yok"):
@@ -262,12 +252,12 @@ async def ban(interaction: discord.Interaction, user: discord.Member, reason: st
 
     await interaction.response.send_message(f"{user} banlandı")
 
-# =========================
+# ======================
 # UNBAN
-# =========================
+# ======================
 
 @bot.tree.command(name="unban")
-async def unban(interaction: discord.Interaction, userid: str):
+async def unban(interaction: discord.Interation, userid: str):
 
     if not interaction.user.guild_permissions.ban_members:
         return await interaction.response.send_message("Yetkin yok", ephemeral=True)
@@ -278,9 +268,9 @@ async def unban(interaction: discord.Interaction, userid: str):
 
     await interaction.response.send_message("Ban kaldırıldı")
 
-# =========================
+# ======================
 # KICK
-# =========================
+# ======================
 
 @bot.tree.command(name="kick")
 async def kick(interaction: discord.Interaction, user: discord.Member):
@@ -292,9 +282,9 @@ async def kick(interaction: discord.Interaction, user: discord.Member):
 
     await interaction.response.send_message(f"{user} atıldı")
 
-# =========================
+# ======================
 # MUTE
-# =========================
+# ======================
 
 @bot.tree.command(name="mute")
 async def mute(interaction: discord.Interaction, user: discord.Member, sure: str):
@@ -304,21 +294,19 @@ async def mute(interaction: discord.Interaction, user: discord.Member, sure: str
     try:
         num=int(sure[:-1])
         unit=sure[-1]
-
         seconds=num*units[unit]
-
     except:
-        return await interaction.response.send_message("Örnek: 10m 1h 1d")
+        return await interaction.response.send_message("Örnek kullanım: 10m 1h 1d")
 
     await user.timeout(timedelta(seconds=seconds))
 
     await interaction.response.send_message(
-        f"{user.mention} {sure} mute aldı"
+        f"{user.mention} {sure} susturuldu"
     )
 
-# =========================
+# ======================
 # UNMUTE
-# =========================
+# ======================
 
 @bot.tree.command(name="unmute")
 async def unmute(interaction: discord.Interaction, user: discord.Member):
