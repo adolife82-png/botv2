@@ -1,252 +1,190 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from discord.ui import View, Select, Button
+from datetime import timedelta
 import os
 from dotenv import load_dotenv
-from datetime import timedelta
 
 load_dotenv()
 
 TOKEN = os.getenv("TOKEN")
-LOG_CHANNEL_ID = int(os.getenv("LOG_CHANNEL_ID"))
-SUPPORT_ROLE_ID = int(os.getenv("SUPPORT_ROLE_ID"))
 VOICE_CHANNEL_ID = int(os.getenv("VOICE_CHANNEL_ID"))
-WELCOME_CHANNEL_ID = 1478713946813890730  # Hoşgeldin Kanalı
+WELCOME_CHANNEL_ID = 1478713946813890730
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ==================================================
-# SES KANALINA OTOMATİK GİRME
-# ==================================================
+# ------------------------------------------------
+# BOT HAZIR OLUNCA SES KANALINA GİRER
+# ------------------------------------------------
 
-async def connect_voice():
-    await bot.wait_until_ready()
+@bot.event
+async def on_ready():
+
+    print(f"{bot.user} aktif.")
 
     channel = bot.get_channel(VOICE_CHANNEL_ID)
 
-    if not channel:
+    if channel is None:
         print("Ses kanalı bulunamadı.")
         return
 
     try:
-        # Botun ses kanalına bağlanıp mikrofonu kapalı şekilde girmesini sağlıyoruz
-        if not discord.utils.get(bot.voice_clients, guild=channel.guild):
-            await channel.connect(self_mute=True, self_deaf=False)
-            print("Ses kanalına bağlandı (mikrofon kapalı).")
-    except Exception as e:
-        print(f"Ses bağlantı hatası: {e}")
 
-# ==================================================
-# MODERASYON KOMUTLARI (BAN, KICK, CLEAR, MUTE, UNMUTE)
-# ==================================================
+        if not channel.guild.voice_client:
+            vc = await channel.connect()
+            await channel.guild.change_voice_state(channel=channel, self_mute=True)
+            print("Bot ses kanalına girdi.")
+
+    except Exception as e:
+        print("Ses hatası:", e)
+
+    await bot.tree.sync()
+
+# ------------------------------------------------
+# CLEAR
+# ------------------------------------------------
 
 @bot.tree.command(name="clear", description="Mesaj siler")
-@app_commands.describe(miktar="Silinecek mesaj sayısı")
-async def clear(interaction: discord.Interaction, miktar: int):
+async def clear(interaction: discord.Interaction, amount: int):
 
     if not interaction.user.guild_permissions.manage_messages:
-        return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+        await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+        return
 
-    await interaction.channel.purge(limit=miktar)
-    await interaction.response.send_message(f"{miktar} mesaj silindi.", ephemeral=True)
+    await interaction.channel.purge(limit=amount)
+    await interaction.response.send_message(f"{amount} mesaj silindi.", ephemeral=True)
 
+# ------------------------------------------------
+# BAN
+# ------------------------------------------------
 
-@bot.tree.command(name="ban", description="Kullanıcıyı banlar")
-async def ban(interaction: discord.Interaction, user: discord.Member, sebep: str = "Sebep belirtilmedi"):
+@bot.tree.command(name="ban", description="Kullanıcı banlar")
+async def ban(interaction: discord.Interaction, user: discord.Member, reason: str = "Sebep yok"):
 
     if not interaction.user.guild_permissions.ban_members:
-        return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+        await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+        return
 
-    await user.ban(reason=sebep)
+    await user.ban(reason=reason)
     await interaction.response.send_message(f"{user} banlandı.")
 
+# ------------------------------------------------
+# UNBAN
+# ------------------------------------------------
 
-@bot.tree.command(name="kick", description="Kullanıcıyı atar")
-async def kick(interaction: discord.Interaction, user: discord.Member, sebep: str = "Sebep belirtilmedi"):
+@bot.tree.command(name="unban", description="Ban kaldırır")
+async def unban(interaction: discord.Interaction, user_id: str):
+
+    if not interaction.user.guild_permissions.ban_members:
+        await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+        return
+
+    user = await bot.fetch_user(int(user_id))
+    await interaction.guild.unban(user)
+
+    await interaction.response.send_message("Ban kaldırıldı.")
+
+# ------------------------------------------------
+# KICK
+# ------------------------------------------------
+
+@bot.tree.command(name="kick", description="Kullanıcı atar")
+async def kick(interaction: discord.Interaction, user: discord.Member, reason: str = "Sebep yok"):
 
     if not interaction.user.guild_permissions.kick_members:
-        return await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+        await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+        return
 
-    await user.kick(reason=sebep)
+    await user.kick(reason=reason)
     await interaction.response.send_message(f"{user} atıldı.")
 
+# ------------------------------------------------
+# MUTE
+# ------------------------------------------------
 
-@bot.tree.command(name="mute", description="Kullanıcıyı süreli susturur")
-@app_commands.describe(sure="Süre (örn: 10m, 1h, 2d)")
-async def mute(interaction: discord.Interaction, user: discord.Member, sure: str):
-
-    await interaction.response.defer()
+@bot.tree.command(name="mute", description="Süreli mute")
+async def mute(interaction: discord.Interaction, user: discord.Member, süre: str):
 
     if not interaction.user.guild_permissions.moderate_members:
-        return await interaction.followup.send("Yetkin yok.")
+        await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+        return
 
-    time_units = {"m": 60, "h": 3600, "d": 86400}
+    units = {"m":60, "h":3600, "d":86400}
 
     try:
-        amount = int(sure[:-1])
-        unit = sure[-1]
-        seconds = amount * time_units[unit]
-        duration = timedelta(seconds=seconds)
+
+        number = int(süre[:-1])
+        unit = süre[-1]
+
+        seconds = number * units[unit]
+
     except:
-        return await interaction.followup.send("Format yanlış. Örnek: 10m, 1h, 2d")
+        await interaction.response.send_message("Örnek kullanım: 10m / 1h / 1d")
+        return
 
-    await user.timeout(duration)
-    await interaction.followup.send(f"{user.mention} {sure} süreyle timeout aldı.")
+    await user.timeout(timedelta(seconds=seconds))
 
+    await interaction.response.send_message(
+        f"{user.mention} {süre} süreyle mute aldı."
+    )
 
-@bot.tree.command(name="unmute", description="Timeout kaldırır")
+# ------------------------------------------------
+# UNMUTE
+# ------------------------------------------------
+
+@bot.tree.command(name="unmute", description="Mute kaldırır")
 async def unmute(interaction: discord.Interaction, user: discord.Member):
 
-    await interaction.response.defer()
-
     if not interaction.user.guild_permissions.moderate_members:
-        return await interaction.followup.send("Yetkin yok.")
+        await interaction.response.send_message("Yetkin yok.", ephemeral=True)
+        return
 
     await user.timeout(None)
-    await interaction.followup.send(f"{user.mention} timeout kaldırıldı.")
 
-# ==================================================
-# HOŞ GELDİN MESAJI (DM ve Kanal)
-# ==================================================
+    await interaction.response.send_message(
+        f"{user.mention} unmute edildi."
+    )
+
+# ------------------------------------------------
+# HOŞ GELDİN
+# ------------------------------------------------
 
 @bot.event
-async def on_member_join(member: discord.Member):
+async def on_member_join(member):
+
     channel = bot.get_channel(WELCOME_CHANNEL_ID)
 
-    # Kanalda hoş geldin mesajı
     embed = discord.Embed(
-        title=f"Hoş geldin, {member.name}!",
-        description="Ares Projects ailesine katıldığın için mutluyuz.",
-        color=discord.Color.green()
+        title=f"👋 Hoş geldin {member.name}",
+        description="**Ares Projects** ailesine katıldığın için mutluyuz!",
+        color=discord.Color.blue()
     )
-    embed.add_field(name="Hizmetlerimiz", value="• Web sitesi yazılımı & geliştirme\n• E-ticaret sistemleri\n• Özel Discord bot geliştirme\n• Plugin & Plugin Paketleri")
-    embed.add_field(name="Deneyim", value="10+ yıl tecrübe • 200+ sunucu • 3000+ sipariş", inline=False)
 
-    await channel.send(embed=embed)
+    embed.add_field(
+        name="🌐 Hizmetlerimiz",
+        value="""
+• Web sitesi yazılımı
+• E-ticaret sistemleri
+• Discord bot geliştirme
+• Plugin paketleri
+""",
+        inline=False
+    )
 
-    # Kullanıcıya DM ile hoş geldin mesajı
+    embed.add_field(
+        name="🚀 Deneyim",
+        value="10+ yıl tecrübe • 200+ sunucu • 3000+ sipariş",
+        inline=False
+    )
+
+    await channel.send(f"{member.mention} aramıza katıldı!", embed=embed)
+
     try:
         await member.send(
-            f"Hoş geldin {member.name}!\nAres Projects ailesine katıldığın için mutluyuz. Hemen yukarıdaki kanalımızda sohbet başlatabilirsin. İyi sohbetler!"
+            f"👋 Hoş geldin **{member.name}**!\nAres Projects sunucusuna katıldığın için teşekkürler."
         )
-    except discord.Forbidden:
-        print(f"{member.name} DM mesajı engellenmiş.")
-
-# ==================================================
-# TICKET SİSTEMİ
-# ==================================================
-
-class TicketSelect(Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(label="Sipariş", emoji="🛒", value="siparis"),
-            discord.SelectOption(label="Destek", emoji="🛠️", value="destek"),
-            discord.SelectOption(label="Proje İsteği", emoji="⭐", value="proje"),
-            discord.SelectOption(label="Ücretsiz Proje", emoji="🎁", value="ucretsiz"),
-            discord.SelectOption(label="Diğer", emoji="❓", value="diger"),
-        ]
-
-        super().__init__(
-            placeholder="Bir kategori seç...",
-            options=options,
-            custom_id="ticket_select",
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-
-        guild = interaction.guild
-        log_channel = bot.get_channel(LOG_CHANNEL_ID)
-
-        category = discord.utils.get(guild.categories, name="TICKETS")
-        if not category:
-            category = await guild.create_category("TICKETS")
-
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            guild.get_role(SUPPORT_ROLE_ID): discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            guild.me: discord.PermissionOverwrite(read_messages=True)
-        }
-
-        channel = await guild.create_text_channel(
-            name=f"ticket-{interaction.user.name}",
-            category=category,
-            overwrites=overwrites
-        )
-
-        embed = discord.Embed(
-            title="📩 Ares Projects - Destek Merkezi",
-            description=f"{interaction.user.mention} talebiniz oluşturuldu.",
-            color=discord.Color.blue()
-        )
-
-        await channel.send(
-            content=f"<@&{SUPPORT_ROLE_ID}>",
-            embed=embed,
-            view=CloseView()
-        )
-
-        await log_channel.send(f"📨 Yeni Ticket: {channel.mention} | Açan: {interaction.user}")
-
-        await interaction.response.send_message(
-            f"Ticket oluşturuldu: {channel.mention}",
-            ephemeral=True
-        )
-
-
-class TicketView(View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.add_item(TicketSelect())
-
-
-class CloseButton(Button):
-    def __init__(self):
-        super().__init__(
-            label="🔒 Ticket Kapat",
-            style=discord.ButtonStyle.danger,
-            custom_id="close_ticket"
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        log_channel = bot.get_channel(LOG_CHANNEL_ID)
-        await log_channel.send(f"🔒 Ticket kapatıldı: {interaction.channel.name}")
-        await interaction.channel.delete()
-
-
-class CloseView(View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.add_item(CloseButton())
-
-
-@bot.tree.command(name="panel", description="Destek panelini oluşturur")
-async def panel(interaction: discord.Interaction):
-
-    embed = discord.Embed(
-        title="📨 Ares Projects - Destek Merkezi",
-        description=(
-            "**Destek Merkezi Hakkında**\n"
-            "Aşağıdan kategori seçerek ticket oluşturabilirsiniz.\n\n"
-            "⚠ Gereksiz ticket açmayınız.\n\n"
-            "Ares Projects © 2026"
-        ),
-        color=discord.Color.dark_blue()
-    )
-
-    await interaction.response.send_message(embed=embed, view=TicketView())
-
-
-# ==================================================
-# BOTUN SES KANALINA GİRME VE KANAL LOGLAMASI
-# ==================================================
-
-@bot.event
-async def on_ready():
-    await bot.tree.sync()
-    bot.loop.create_task(connect_voice())  # Ses kanalına bağlan
-    print(f"{bot.user} aktif.")
+    except:
+        pass
 
 bot.run(TOKEN)
